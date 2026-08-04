@@ -1,0 +1,202 @@
+// Zyphe GTM Command Center — Prisma schema
+// Postgres. Run: prisma migrate dev. Seed with prisma/seed.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("member") // member | admin
+  createdAt DateTime @default(now())
+  reminders Reminder[]
+  actions   ActionLog[]
+}
+
+enum Segment {
+  SMB
+  MID_MARKET
+  ENTERPRISE
+  PARTNER
+}
+
+model Deal {
+  id           String    @id @default(cuid())
+  hubspotId    String?   @unique
+  name         String
+  company      String?
+  stage        String
+  amount       Float?
+  segment      Segment?
+  ownerEmail   String?
+  nextStep     String?
+  nextStepDate DateTime?
+  closeDate    DateTime?
+  hygieneFlags String[]  // e.g. ["missing_amount","missing_segment","stale"]
+  updatedAt    DateTime  @updatedAt
+  contacts     Contact[]
+  tasks        Task[]
+}
+
+model Contact {
+  id        String  @id @default(cuid())
+  hubspotId String? @unique
+  name      String?
+  email     String?
+  company   String?
+  persona   String? // Compliance | Operations | Product | Founder
+  dealId    String?
+  deal      Deal?   @relation(fields: [dealId], references: [id])
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+}
+
+model Task {
+  id        String     @id @default(cuid())
+  title     String
+  detail    String?
+  dueDate   DateTime?
+  priority  Int        @default(3) // 1 highest
+  status    TaskStatus @default(OPEN)
+  source    String?    // cockpit | followup | manual | signal
+  dealId    String?
+  deal      Deal?      @relation(fields: [dealId], references: [id])
+  createdAt DateTime   @default(now())
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  title     String
+  dueDate   DateTime?
+  cron      String?  // for recurring
+  status    String   @default("active")
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+enum SignalType {
+  FUNDING
+  REGULATORY
+  COMPETITOR
+  HIRING
+  NEWS
+}
+
+model Signal {
+  id          String     @id @default(cuid())
+  type        SignalType
+  account     String
+  description String
+  url         String?
+  score       Int        @default(0)
+  status      String     @default("new") // new | actioned | dismissed
+  detectedAt  DateTime   @default(now())
+  actionedAt  DateTime?
+}
+
+model Event {
+  id        String    @id @default(cuid())
+  name      String
+  location  String?
+  startDate DateTime?
+  endDate   DateTime?
+  cost      String?   // free-form (packages differ)
+  status    String    @default("evaluating") // evaluating | going | skip
+  whoGoes   String[]
+  deadline  DateTime?
+  notes     String?
+}
+
+model Sequence {
+  id            String   @id @default(cuid())
+  externalId    String?
+  provider      String   // amplemarket | smartlead
+  name          String
+  status        String   @default("active")
+  stats         Json?    // sent, open, reply, meetings, deliverability
+  updatedAt     DateTime @updatedAt
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  driveId     String?  @unique
+  title       String
+  topic       String?  // ICPs | scripts | emails | strategy | competition | events
+  destination String?  // Hendrik | Michelangelo | prospects | internal
+  url         String?
+  tags        String[]
+  updatedAt   DateTime @updatedAt
+}
+
+model ContentPost {
+  id          String    @id @default(cuid())
+  platform    String    // linkedin | instagram | x | newsletter
+  author      String?   // which voice
+  status      String    @default("draft") // draft | scheduled | posted
+  scheduledAt DateTime?
+  engagement  Json?
+}
+
+model Kpi {
+  id        String   @id @default(cuid())
+  name      String   @unique // arr | pipeline_created | meetings_booked | calls
+  value     Float    @default(0)
+  target    Float?
+  period    String   @default("weekly")
+  updatedAt DateTime @updatedAt
+}
+
+// Single source of truth for product metrics used in all drafts.
+model MetricSet {
+  id        String   @id @default("default")
+  data      Json     // { verificationSeconds, docMatchPct, countries, ... }
+  updatedAt DateTime @updatedAt
+}
+
+// Knowledge base chunks (product facts, battlecards, ICPs, scripts) for AI context.
+model KnowledgeDoc {
+  id      String @id @default(cuid())
+  title   String
+  content String
+  tags    String[]
+}
+
+model Draft {
+  id        String   @id @default(cuid())
+  skill     String   // call-prep | draft-follow-ups | ...
+  input     Json
+  output    String
+  status    String   @default("pending") // pending | approved | discarded
+  createdAt DateTime @default(now())
+}
+
+model ActionLog {
+  id        String   @id @default(cuid())
+  action    String
+  payload   Json?
+  result    String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model IntegrationToken {
+  id           String   @id @default(cuid())
+  provider     String   @unique // hubspot | amplemarket | google | slack | clay | smartlead
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  scopes       String[]
+  updatedAt    DateTime @updatedAt
+}
